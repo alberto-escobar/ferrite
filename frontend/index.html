@@ -1,3 +1,33 @@
 <html>
-    Welcome to ferrite
+<head>
+    <title>Ferrite</title>
+</head>
+<body>
+    <h1>Welcome to ferrite</h1>
+
+    <button id="add-dummy">Add Dummy Track</button>
+    <button id="fetch-tracks">Fetch All Tracks</button>
+
+    <ul id="tracks-list"></ul>
+
+    <script>
+        document.getElementById('add-dummy').addEventListener('click', async () => {
+            await fetch('/api/tracks/dummy', { method: 'POST' });
+        });
+
+        document.getElementById('fetch-tracks').addEventListener('click', async () => {
+            const response = await fetch('/api/tracks');
+            const tracks = await response.json();
+
+            const list = document.getElementById('tracks-list');
+            list.innerHTML = '';
+
+            for (const track of tracks) {
+                const item = document.createElement('li');
+                item.textContent = `${track.title} - ${track.artist} (${track.album ?? 'No Album'})`;
+                list.appendChild(item);
+            }
+        });
+    </script>
+</body>
 </html>
