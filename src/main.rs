@@ -1,4 +1,5 @@
 mod db;
+mod scanner;
 
 use axum::{
     Router,
@@ -13,6 +14,22 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[tokio::main]
 async fn main() {
     let pool = db::init_db("sqlite://ferrite.db").await;
+    
+    let music_dir = std::path::Path::new("./Music");
+    let tracks = scanner::scan_directory(music_dir);
+
+    for track in tracks {
+        db::insert_track(
+            &pool,
+            &track.title,
+            &track.artist,
+            track.album.as_deref(),
+            &track.file_path,
+            track.duration,
+            track.track_number,
+        ).await;
+    }
+
     let app = Router::new()
         .route("/", get(index))
         .route("/api/tracks", get(get_tracks))
