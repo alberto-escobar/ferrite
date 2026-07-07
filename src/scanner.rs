@@ -24,7 +24,6 @@ pub struct ScannedTrack {
     pub file_path: String,
     pub duration: Option<i64>,
     pub track_number: Option<i64>,
-    pub kind: Option<String>,
 }
 
 // ── Process a single file ─────────────────────────────────────────────────────
@@ -71,7 +70,6 @@ pub fn process_file(path: &Path) -> Option<ScannedTrack> {
         file_path: path.to_string_lossy().to_string(),
         duration,
         track_number,
-        kind: None,
     })
 }
 
