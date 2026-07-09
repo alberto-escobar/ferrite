@@ -3,8 +3,6 @@ use lofty::prelude::*;
 use lofty::probe::Probe;
 use walkdir::WalkDir;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 fn is_audio_file(path: &Path) -> bool {
     match path.extension().and_then(|e| e.to_str()) {
         Some(ext) => matches!(
@@ -15,7 +13,6 @@ fn is_audio_file(path: &Path) -> bool {
     }
 }
 
-// ── Track data extracted from a file ─────────────────────────────────────────
 
 pub struct ScannedTrack {
     pub title: String,
@@ -26,13 +23,11 @@ pub struct ScannedTrack {
     pub track_number: Option<i64>,
 }
 
-// ── Process a single file ─────────────────────────────────────────────────────
-
 pub fn process_file(path: &Path) -> Option<ScannedTrack> {
     let tagged_file = match Probe::open(path).and_then(|p| p.read()) {
         Ok(f) => f,
         Err(e) => {
-            println!("⚠️  Could not read {:?}: {}", path, e);
+            println!("Could not read {:?}: {}", path, e);
             return None;
         }
     };
@@ -72,8 +67,6 @@ pub fn process_file(path: &Path) -> Option<ScannedTrack> {
         track_number,
     })
 }
-
-// ── Walk a directory and process all audio files ──────────────────────────────
 
 pub fn scan_directory(dir: &Path) -> Vec<ScannedTrack> {
     let mut tracks = Vec::new();
