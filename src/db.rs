@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 // ── Models ────────────────────────────────────────────────────────────────────
 
-#[derive(sqlx::FromRow)]
+#[derive(sqlx::FromRow, serde::Serialize)]
 pub struct Track {
     pub id: i64,
     pub title: String,
