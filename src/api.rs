@@ -6,8 +6,6 @@ use axum::{
 use sqlx::SqlitePool;
 use crate::db;
 
-// ── Tracks ────────────────────────────────────────────────────────────────────
-
 pub async fn get_all_tracks(
     State(pool): State<SqlitePool>,
 ) -> Json<Vec<db::Track>> {
@@ -25,16 +23,12 @@ pub async fn get_track_by_id(
     }
 }
 
-// ── Albums ────────────────────────────────────────────────────────────────────
-
 pub async fn get_all_albums(
     State(pool): State<SqlitePool>,
 ) -> Json<Vec<String>> {
     let albums = db::get_all_albums(&pool).await;
     Json(albums)
 }
-
-// ── Artists ───────────────────────────────────────────────────────────────────
 
 pub async fn get_all_artists(
     State(pool): State<SqlitePool>,

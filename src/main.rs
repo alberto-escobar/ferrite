@@ -11,10 +11,8 @@ use axum::{
 
 #[tokio::main]
 async fn main() {
-    // Database
     let pool = db::init_db("sqlite://ferrite.db").await;
 
-    // Scanner
     let music_dir = std::path::Path::new("./Music");
     let tracks = scanner::scan_directory(music_dir);
     for track in tracks {
@@ -29,7 +27,6 @@ async fn main() {
         ).await;
     }
 
-    // Router
     let app = Router::new()
         .route("/", get(index))
         .route("/api/tracks", get(api::get_all_tracks))
