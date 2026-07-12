@@ -1,0 +1,9 @@
+services:
+  ferrite:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./Music:/app/Music
+      - ./ferrite.db:/app/ferrite.db
+    restart: unless-stopped
