@@ -1,4 +1,5 @@
 target/
+!target/aarch64-unknown-linux-gnu/release/Ferrite
 Music/
 ferrite.db
 .git/

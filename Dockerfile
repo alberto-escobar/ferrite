@@ -11,5 +11,6 @@ FROM debian:bookworm-slim
 WORKDIR /app
 COPY --from=builder /app/target/release/Ferrite ./ferrite
 COPY frontend/ frontend/
+COPY migrations/ migrations/
 EXPOSE 3000
 CMD ["./ferrite"]

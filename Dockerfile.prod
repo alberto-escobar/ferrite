@@ -1,0 +1,17 @@
+# ── Runtime only — binary is pre-built by GitHub Actions ──────────────────────
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Binary is cross-compiled by GitHub Actions before this runs
+COPY target/aarch64-unknown-linux-gnu/release/Ferrite ./ferrite
+COPY frontend/ frontend/
+COPY migrations/ migrations/
+
+EXPOSE 3000
+
+CMD ["./ferrite"]
