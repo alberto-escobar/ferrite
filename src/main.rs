@@ -37,7 +37,7 @@ async fn main() {
         .with_state(pool);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    println!("Ferrite sever running at http://localhost:3000");
+    println!("Ferrite running at http://localhost:3000");
     axum::serve(listener, app).await.unwrap();
 }
 
