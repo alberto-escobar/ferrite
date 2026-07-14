@@ -35,6 +35,7 @@ async fn main() {
         .route("/api/artists", get(api::get_all_artists))
         .route("/api/tracks/{id}/stream", get(stream::stream_track))
         .route("/api/fetch", post(api::fetch_song))
+        .route("/api/downloads", get(api::get_downloads))
         .with_state(pool);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();

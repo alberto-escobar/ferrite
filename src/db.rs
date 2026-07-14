@@ -16,6 +16,15 @@ pub struct Track {
     pub track_number: Option<i64>,
 }
 
+#[derive(sqlx::FromRow, serde::Serialize)]
+pub struct Download {
+    pub id: i64,
+    pub url: String,
+    pub status: String,
+    pub error: Option<String>,
+    pub created_at: String,
+}
+
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 pub async fn init_db(database_url: &str) -> SqlitePool {
@@ -107,4 +116,37 @@ pub async fn get_all_artists(pool: &SqlitePool) -> Vec<String> {
     .fetch_all(pool)
     .await
     .expect("Failed to query artists")
+}
+
+// ── Download queries ──────────────────────────────────────────────────────────
+
+pub async fn insert_download(pool: &SqlitePool, url: &str) -> i64 {
+    let result = sqlx::query("INSERT INTO downloads (url, status) VALUES (?, 'pending')")
+        .bind(url)
+        .execute(pool)
+        .await
+        .expect("Failed to insert download");
+
+    result.last_insert_rowid()
+}
+
+pub async fn update_download_status(pool: &SqlitePool, id: i64, status: &str, error: Option<&str>) {
+    sqlx::query("UPDATE downloads SET status = ?, error = ? WHERE id = ?")
+        .bind(status)
+        .bind(error)
+        .bind(id)
+        .execute(pool)
+        .await
+        .expect("Failed to update download");
+}
+
+pub async fn get_all_downloads(pool: &SqlitePool) -> Vec<Download> {
+    sqlx::query_as::<_, Download>(
+        "SELECT id, url, status, error, created_at
+         FROM downloads
+         ORDER BY id DESC",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("Failed to query downloads")
 }

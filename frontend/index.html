@@ -200,6 +200,89 @@
     .empty h2 { font-size: 18px; margin-bottom: 8px; color: var(--text); }
     .empty p { font-size: 13px; line-height: 1.6; }
 
+    /* ── Download / import ── */
+    .download-form {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      max-width: 640px;
+    }
+
+    .download-form input[type=text] {
+      flex: 1;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    .download-form input[type=text]:focus {
+      outline: none;
+      border-color: var(--gold-dim);
+    }
+
+    .download-submit {
+      background: var(--gold);
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      padding: 0 20px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .download-submit:hover { background: #d4b87a; }
+    .download-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .download-error {
+      color: #e07b7b;
+      font-size: 12px;
+      margin-bottom: 16px;
+      min-height: 16px;
+    }
+
+    .download-empty {
+      color: var(--text-muted);
+      font-size: 13px;
+      padding: 24px 0;
+    }
+
+    .download-url-cell {
+      max-width: 400px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .status-pending     { background: rgba(136,136,136,0.15); color: var(--text-muted); }
+    .status-in_progress { background: rgba(200,169,110,0.15); color: var(--gold); }
+    .status-done        { background: rgba(88,166,120,0.15); color: #6cbf84; }
+    .status-failed      { background: rgba(200,90,90,0.15); color: #e07b7b; }
+
+    .download-error-row {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-family: monospace;
+      padding: 4px 12px 12px !important;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
     /* ── Player bar ── */
     .player {
       grid-column: 1 / -1;
@@ -438,6 +521,8 @@
     <div class="nav-item active" onclick="showView('tracks')">All Tracks</div>
     <div class="nav-item" onclick="showView('albums')">Albums</div>
     <div class="nav-item" onclick="showView('artists')">Artists</div>
+    <div class="nav-label">Import</div>
+    <div class="nav-item" onclick="showView('download')">Add Music</div>
   </aside>
 
   <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
@@ -503,12 +588,14 @@
   function showView(view) {
     currentView = view;
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.nav-item')[['tracks','albums','artists'].indexOf(view)].classList.add('active');
+    document.querySelectorAll('.nav-item')[['tracks','albums','artists','download'].indexOf(view)].classList.add('active');
 
     if (view === 'tracks') renderTracks();
     else if (view === 'albums') renderGrouped('album', 'Albums');
     else if (view === 'artists') renderGrouped('artist', 'Artists');
+    else if (view === 'download') renderDownloads();
 
+    if (view !== 'download') stopDownloadsPolling();
     closeSidebar();
   }
 
@@ -598,6 +685,126 @@
       </div>`).join('');
 
     document.getElementById('main').innerHTML = `<div class="section-title">${title}</div>${html}`;
+  }
+
+  // ── Download / import ────────────────────────────────────────────────────
+
+  let downloadsPollTimer = null;
+  let lastDownloadStatuses = {};
+
+  async function renderDownloads() {
+    document.getElementById('main').innerHTML = `
+      <div class="section-title">Add Music</div>
+      <form class="download-form" onsubmit="submitDownload(event)">
+        <input type="text" id="download-url" placeholder="Paste a YouTube link…" autocomplete="off" required />
+        <button type="submit" class="download-submit" id="download-submit-btn">Download</button>
+      </form>
+      <div class="download-error" id="download-error"></div>
+      <div id="download-list"></div>`;
+
+    await refreshDownloads();
+  }
+
+  async function submitDownload(event) {
+    event.preventDefault();
+    const input = document.getElementById('download-url');
+    const btn = document.getElementById('download-submit-btn');
+    const errorEl = document.getElementById('download-error');
+    const url = input.value.trim();
+    if (!url) return;
+
+    errorEl.textContent = '';
+    btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+
+      if (!res.ok) {
+        errorEl.textContent = 'Could not start download — check the URL and try again.';
+        return;
+      }
+
+      input.value = '';
+      await refreshDownloads();
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function refreshDownloads() {
+    const res = await fetch('/api/downloads');
+    const items = await res.json();
+
+    const justFinished = items.some(d =>
+      d.status === 'done' && lastDownloadStatuses[d.id] && lastDownloadStatuses[d.id] !== 'done'
+    );
+    lastDownloadStatuses = Object.fromEntries(items.map(d => [d.id, d.status]));
+
+    renderDownloadList(items);
+
+    if (justFinished) {
+      const tracksRes = await fetch('/api/tracks');
+      tracks = await tracksRes.json();
+      if (currentView === 'tracks') renderTracks();
+    }
+
+    const hasActive = items.some(d => d.status === 'pending' || d.status === 'in_progress');
+    if (hasActive) startDownloadsPolling();
+    else stopDownloadsPolling();
+  }
+
+  function renderDownloadList(items) {
+    const list = document.getElementById('download-list');
+    if (!list) return;
+
+    if (!items.length) {
+      list.innerHTML = `<p class="download-empty">No downloads yet.</p>`;
+      return;
+    }
+
+    const rows = items.map(d => `
+      <tr>
+        <td class="title download-url-cell" title="${esc(d.url)}">${esc(d.url)}</td>
+        <td><span class="status-badge status-${d.status}">${statusLabel(d.status)}</span></td>
+        <td>${esc(d.created_at)}</td>
+      </tr>
+      ${d.status === 'failed' && d.error ? `<tr><td colspan="3" class="download-error-row">${esc(d.error)}</td></tr>` : ''}
+    `).join('');
+
+    list.innerHTML = `
+      <div class="track-list-wrap">
+        <table class="track-list">
+          <thead>
+            <tr>
+              <th>URL</th>
+              <th style="width:120px">Status</th>
+              <th style="width:160px">Submitted</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function statusLabel(status) {
+    return { pending: 'Pending', in_progress: 'In Progress', done: 'Done', failed: 'Failed' }[status] || status;
+  }
+
+  function startDownloadsPolling() {
+    if (downloadsPollTimer) return;
+    downloadsPollTimer = setInterval(() => {
+      if (currentView === 'download') refreshDownloads();
+      else stopDownloadsPolling();
+    }, 3000);
+  }
+
+  function stopDownloadsPolling() {
+    clearInterval(downloadsPollTimer);
+    downloadsPollTimer = null;
   }
 
   // ── Playback ──────────────────────────────────────────────────────────────
