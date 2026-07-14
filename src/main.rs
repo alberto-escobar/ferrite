@@ -1,6 +1,7 @@
 mod db;
 mod scanner;
 mod api;
+mod metadata;
 mod stream;
 
 use axum::{
@@ -11,6 +12,8 @@ use axum::{
 
 #[tokio::main]
 async fn main() {
+    dotenvy::dotenv().ok();
+
     let pool = db::init_db("sqlite://ferrite.db").await;
 
     let music_dir = std::path::Path::new("./Music");

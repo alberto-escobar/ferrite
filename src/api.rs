@@ -5,6 +5,7 @@ use axum::{
 };
 use sqlx::SqlitePool;
 use crate::db;
+use crate::metadata;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
@@ -75,20 +76,19 @@ pub async fn fetch_song(
 async fn run_download(pool: SqlitePool, id: i64, url: String) {
     db::update_download_status(&pool, id, "in_progress", None).await;
 
-    // yt-dlp downloads the raw stream and does its ffmpeg audio-extraction pass
-    // in place, so without this, half-finished files show up in Music/ while a
-    // download is still running. Routing temp/working files to a scratch dir
-    // keeps Music/ untouched until the finished mp3 is moved in.
+    // Everything — the raw download, yt-dlp's ffmpeg audio-extraction pass, and
+    // the info-json dump — happens in this scratch dir. Nothing lands in Music/
+    // until metadata generation and tagging succeed and we move the finished
+    // file in ourselves.
     let temp_dir = std::env::temp_dir().join(format!("ferrite-yt-dlp-{id}"));
 
     let mut child = match Command::new("yt-dlp")
         .arg("-x")
         .arg("--audio-format")
         .arg("mp3")
-        .arg("--paths")
-        .arg(format!("temp:{}", temp_dir.display()))
-        .arg("--paths")
-        .arg("home:Music")
+        .arg("--write-info-json")
+        .arg("-P")
+        .arg(&temp_dir)
         .arg("-o")
         .arg("%(title)s.%(ext)s")
         .arg("--")
@@ -127,21 +127,126 @@ async fn run_download(pool: SqlitePool, id: i64, url: String) {
     let status = child.wait().await;
     let _ = stdout_task.await;
     let stderr_lines = stderr_task.await.unwrap_or_default();
+
+    let result: Result<(), String> = match status {
+        Ok(s) if s.success() => process_downloaded_file(&temp_dir).await,
+        Ok(_) => Err(stderr_lines.join("\n")),
+        Err(e) => Err(e.to_string()),
+    };
+
     let _ = tokio::fs::remove_dir_all(&temp_dir).await;
 
-    match status {
-        Ok(s) if s.success() => {
+    match result {
+        Ok(()) => {
             db::update_download_status(&pool, id, "done", None).await;
             rescan_library(&pool).await;
         }
-        Ok(_) => {
-            let error = stderr_lines.join("\n");
-            db::update_download_status(&pool, id, "failed", Some(&error)).await;
-        }
         Err(e) => {
-            db::update_download_status(&pool, id, "failed", Some(&e.to_string())).await;
+            eprintln!("[yt-dlp:{id}] failed: {e}");
+            db::update_download_status(&pool, id, "failed", Some(&e)).await;
         }
     }
+}
+
+/// Locates yt-dlp's output in `temp_dir`, asks Gemini to generate clean tags
+/// from the video's title/uploader/description, writes those tags into the
+/// mp3, and moves the finished file into Music/.
+async fn process_downloaded_file(temp_dir: &std::path::Path) -> Result<(), String> {
+    let mut mp3_path = None;
+    let mut info_path = None;
+
+    let mut entries = tokio::fs::read_dir(temp_dir)
+        .await
+        .map_err(|e| format!("Failed to read temp dir: {e}"))?;
+
+    while let Some(entry) = entries
+        .next_entry()
+        .await
+        .map_err(|e| format!("Failed to read temp dir entry: {e}"))?
+    {
+        let path = entry.path();
+        if path.to_string_lossy().ends_with(".info.json") {
+            info_path = Some(path);
+        } else if path.extension().and_then(|e| e.to_str()) == Some("mp3") {
+            mp3_path = Some(path);
+        }
+    }
+
+    let mp3_path = mp3_path.ok_or("yt-dlp did not produce an mp3 file")?;
+    let info_path = info_path.ok_or("yt-dlp did not produce an info.json file")?;
+
+    let info_json = tokio::fs::read_to_string(&info_path)
+        .await
+        .map_err(|e| format!("Failed to read info.json: {e}"))?;
+    let video_info: metadata::VideoInfo = serde_json::from_str(&info_json)
+        .map_err(|e| format!("Failed to parse yt-dlp info.json: {e}"))?;
+
+    let song_metadata = metadata::generate_metadata(&video_info).await?;
+
+    let tag_path = mp3_path.clone();
+    tokio::task::spawn_blocking(move || write_tags(&tag_path, &song_metadata))
+        .await
+        .map_err(|e| format!("Tagging task panicked: {e}"))??;
+
+    tokio::fs::create_dir_all("Music")
+        .await
+        .map_err(|e| format!("Failed to create Music dir: {e}"))?;
+
+    let file_name = mp3_path
+        .file_name()
+        .ok_or("Downloaded mp3 path has no filename")?;
+    let dest = std::path::Path::new("Music").join(file_name);
+
+    move_file(&mp3_path, &dest)
+        .await
+        .map_err(|e| format!("Failed to move finished file into Music/: {e}"))?;
+
+    Ok(())
+}
+
+/// The temp dir and Music/ may be on different filesystems (e.g. /tmp is
+/// tmpfs), so a plain rename can fail with EXDEV — fall back to copy+delete.
+async fn move_file(src: &std::path::Path, dest: &std::path::Path) -> std::io::Result<()> {
+    match tokio::fs::rename(src, dest).await {
+        Ok(()) => Ok(()),
+        Err(e) if e.raw_os_error() == Some(18) /* EXDEV */ => {
+            tokio::fs::copy(src, dest).await?;
+            tokio::fs::remove_file(src).await?;
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
+fn write_tags(path: &std::path::Path, song_metadata: &metadata::SongMetadata) -> Result<(), String> {
+    use lofty::prelude::*;
+    use lofty::probe::Probe;
+
+    let mut tagged_file = Probe::open(path)
+        .map_err(|e| e.to_string())?
+        .read()
+        .map_err(|e| e.to_string())?;
+
+    if tagged_file.primary_tag().is_none() {
+        let tag_type = tagged_file.primary_tag_type();
+        tagged_file.insert_tag(lofty::tag::Tag::new(tag_type));
+    }
+    let tag = tagged_file
+        .primary_tag_mut()
+        .expect("tag was just inserted if missing");
+
+    tag.set_title(song_metadata.title.clone());
+    tag.set_artist(song_metadata.artist.clone());
+    if let Some(album) = &song_metadata.album {
+        tag.set_album(album.clone());
+    }
+    if let Some(track_number) = song_metadata.track_number {
+        tag.set_track(track_number as u32);
+    }
+
+    tagged_file
+        .save_to_path(path, lofty::config::WriteOptions::default())
+        .map_err(|e| e.to_string())
 }
 
 async fn rescan_library(pool: &SqlitePool) {
