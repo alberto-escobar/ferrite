@@ -5,6 +5,7 @@ use axum::{
 };
 use sqlx::SqlitePool;
 use crate::db;
+use std::process::Command;
 
 pub async fn get_all_tracks(
     State(pool): State<SqlitePool>,
@@ -35,4 +36,27 @@ pub async fn get_all_artists(
 ) -> Json<Vec<String>> {
     let artists = db::get_all_artists(&pool).await;
     Json(artists)
+}
+
+#[derive(serde::Deserialize)]
+pub struct ImportRequest {
+    pub url: String,
+}
+
+pub async fn fetch_song(
+    Json(body): Json<ImportRequest>,
+) -> Json<serde_json::Value> {
+    let status = Command::new("yt-dlp")
+        .arg("-x")
+        .arg("--audio-format")
+        .arg("mp3")
+        .arg(&body.url)
+        .status()
+        .expect("Failed to execute command");
+
+    if status.success() {
+        Json(serde_json::json!({ "status": "ok" }))
+    } else {
+        Json(serde_json::json!({ "status": "error" }))
+    }
 }

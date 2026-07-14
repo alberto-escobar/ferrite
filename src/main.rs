@@ -5,7 +5,7 @@ mod stream;
 
 use axum::{
     Router,
-    routing::get,
+    routing::{get, post},
     response::Html,
 };
 
@@ -34,6 +34,7 @@ async fn main() {
         .route("/api/albums", get(api::get_all_albums))
         .route("/api/artists", get(api::get_all_artists))
         .route("/api/tracks/{id}/stream", get(stream::stream_track))
+        .route("/api/fetch", post(api::fetch_song))
         .with_state(pool);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
