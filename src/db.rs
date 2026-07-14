@@ -14,6 +14,7 @@ pub struct Track {
     pub file_path: String,
     pub duration: Option<i64>,
     pub track_number: Option<i64>,
+    pub year: Option<i64>,
 }
 
 #[derive(sqlx::FromRow, serde::Serialize)]
@@ -49,7 +50,7 @@ pub async fn init_db(database_url: &str) -> SqlitePool {
 
 pub async fn get_all_tracks(pool: &SqlitePool) -> Vec<Track> {
     sqlx::query_as::<_, Track>(
-        "SELECT id, title, artist, album, file_path, duration, track_number
+        "SELECT id, title, artist, album, file_path, duration, track_number, year
          FROM tracks
          ORDER BY artist, album, track_number",
     )
@@ -60,7 +61,7 @@ pub async fn get_all_tracks(pool: &SqlitePool) -> Vec<Track> {
 
 pub async fn get_track_by_id(pool: &SqlitePool, id: i64) -> Option<Track> {
     sqlx::query_as::<_, Track>(
-        "SELECT id, title, artist, album, file_path, duration, track_number
+        "SELECT id, title, artist, album, file_path, duration, track_number, year
          FROM tracks WHERE id = ?",
     )
     .bind(id)
@@ -77,10 +78,11 @@ pub async fn insert_track(
     file_path: &str,
     duration: Option<i64>,
     track_number: Option<i64>,
+    year: Option<i64>,
 ) {
     sqlx::query(
-        "INSERT OR IGNORE INTO tracks (title, artist, album, file_path, duration, track_number)
-         VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT OR IGNORE INTO tracks (title, artist, album, file_path, duration, track_number, year)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(title)
     .bind(artist)
@@ -88,6 +90,7 @@ pub async fn insert_track(
     .bind(file_path)
     .bind(duration)
     .bind(track_number)
+    .bind(year)
     .execute(pool)
     .await
     .expect("Failed to insert track");

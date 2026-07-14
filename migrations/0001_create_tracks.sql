@@ -5,5 +5,6 @@ CREATE TABLE IF NOT EXISTS tracks (
     album        TEXT,
     file_path    TEXT NOT NULL UNIQUE,
     duration     INTEGER,
-    track_number INTEGER
+    track_number INTEGER,
+    year         INTEGER
 );

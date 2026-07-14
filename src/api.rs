@@ -129,7 +129,7 @@ async fn run_download(pool: SqlitePool, id: i64, url: String) {
     let stderr_lines = stderr_task.await.unwrap_or_default();
 
     let result: Result<(), String> = match status {
-        Ok(s) if s.success() => process_downloaded_file(&temp_dir).await,
+        Ok(s) if s.success() => process_downloaded_file(&temp_dir, id).await,
         Ok(_) => Err(stderr_lines.join("\n")),
         Err(e) => Err(e.to_string()),
     };
@@ -151,7 +151,7 @@ async fn run_download(pool: SqlitePool, id: i64, url: String) {
 /// Locates yt-dlp's output in `temp_dir`, asks Gemini to generate clean tags
 /// from the video's title/uploader/description, writes those tags into the
 /// mp3, and moves the finished file into Music/.
-async fn process_downloaded_file(temp_dir: &std::path::Path) -> Result<(), String> {
+async fn process_downloaded_file(temp_dir: &std::path::Path, id: i64) -> Result<(), String> {
     let mut mp3_path = None;
     let mut info_path = None;
 
@@ -181,7 +181,7 @@ async fn process_downloaded_file(temp_dir: &std::path::Path) -> Result<(), Strin
     let video_info: metadata::VideoInfo = serde_json::from_str(&info_json)
         .map_err(|e| format!("Failed to parse yt-dlp info.json: {e}"))?;
 
-    let song_metadata = metadata::generate_metadata(&video_info).await?;
+    let song_metadata = metadata::generate_metadata(&video_info, id).await?;
 
     let tag_path = mp3_path.clone();
     tokio::task::spawn_blocking(move || write_tags(&tag_path, &song_metadata))
@@ -243,6 +243,16 @@ fn write_tags(path: &std::path::Path, song_metadata: &metadata::SongMetadata) ->
     if let Some(track_number) = song_metadata.track_number {
         tag.set_track(track_number as u32);
     }
+    if let Some(year) = song_metadata.year {
+        tag.set_date(lofty::tag::items::Timestamp {
+            year: year as u16,
+            month: None,
+            day: None,
+            hour: None,
+            minute: None,
+            second: None,
+        });
+    }
 
     tagged_file
         .save_to_path(path, lofty::config::WriteOptions::default())
@@ -264,6 +274,7 @@ async fn rescan_library(pool: &SqlitePool) {
             &track.file_path,
             track.duration,
             track.track_number,
+            track.year,
         ).await;
     }
 }

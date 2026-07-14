@@ -27,6 +27,7 @@ async fn main() {
             &track.file_path,
             track.duration,
             track.track_number,
+            track.year,
         ).await;
     }
 

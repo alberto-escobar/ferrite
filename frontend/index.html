@@ -632,6 +632,7 @@
         <td class="title">${esc(t.title)}</td>
         <td>${esc(t.artist)}</td>
         <td>${esc(t.album || '—')}</td>
+        <td>${t.year || '—'}</td>
         <td class="track-duration">${formatDuration(t.duration)}</td>
       </tr>`).join('');
 
@@ -645,6 +646,7 @@
               <th>Title</th>
               <th>Artist</th>
               <th>Album</th>
+              <th>Year</th>
               <th style="text-align:right">Duration</th>
             </tr>
           </thead>
@@ -676,6 +678,7 @@
                   </td>
                   <td class="title">${esc(t.title)}</td>
                   <td>${esc(t.artist)}</td>
+                  <td>${t.year || '—'}</td>
                   <td class="track-duration">${formatDuration(t.duration)}</td>
                 </tr>`;
               }).join('')}
