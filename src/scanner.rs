@@ -21,6 +21,7 @@ pub struct ScannedTrack {
     pub file_path: String,
     pub duration: Option<i64>,
     pub track_number: Option<i64>,
+    pub year: Option<i64>,
 }
 
 pub fn process_file(path: &Path) -> Option<ScannedTrack> {
@@ -51,6 +52,8 @@ pub fn process_file(path: &Path) -> Option<ScannedTrack> {
 
     let track_number = tag.and_then(|t| t.track()).map(|n| n as i64);
 
+    let year = tag.and_then(|t| t.date()).map(|ts| ts.year as i64);
+
     let duration = tagged_file
         .properties()
         .duration()
@@ -65,6 +68,7 @@ pub fn process_file(path: &Path) -> Option<ScannedTrack> {
         file_path: path.to_string_lossy().to_string(),
         duration,
         track_number,
+        year,
     })
 }
 

@@ -1,16 +1,19 @@
 mod db;
 mod scanner;
 mod api;
+mod metadata;
 mod stream;
 
 use axum::{
     Router,
-    routing::get,
+    routing::{get, post},
     response::Html,
 };
 
 #[tokio::main]
 async fn main() {
+    dotenvy::dotenv().ok();
+
     let pool = db::init_db("sqlite://ferrite.db").await;
 
     let music_dir = std::path::Path::new("./Music");
@@ -24,6 +27,7 @@ async fn main() {
             &track.file_path,
             track.duration,
             track.track_number,
+            track.year,
         ).await;
     }
 
@@ -34,6 +38,8 @@ async fn main() {
         .route("/api/albums", get(api::get_all_albums))
         .route("/api/artists", get(api::get_all_artists))
         .route("/api/tracks/{id}/stream", get(stream::stream_track))
+        .route("/api/fetch", post(api::fetch_song))
+        .route("/api/downloads", get(api::get_downloads))
         .with_state(pool);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
