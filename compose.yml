@@ -3,6 +3,8 @@ services:
     build: .
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     volumes:
       - ./Music:/app/Music
       - ./ferrite.db:/app/ferrite.db
