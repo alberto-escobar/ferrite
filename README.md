@@ -46,7 +46,7 @@ Ferrite uses SQLite as its database rather than a dedicated server like Postgres
 Ferrite ships with a production Dockerfile (`Dockerfile.prod`) that builds a small ARM64 image for running on a Raspberry Pi, plus a local Dockerfile/compose setup for running in a container on a dev machine. Packaging it as a container means the server, its runtime dependencies, and the SQLite data volume are all deployed as one unit, so shipping an update to the Pi is just pulling a new image rather than reconciling toolchains by hand. Since Rust compiles to a self-contained binary, Ferrite can just as easily be run directly on the host without Docker — the container is a deployment convenience, not a requirement.
 
 ### Making Ferrite Public
-I wanted to have this server be accessbile from anywhere in the world. So I performed the following steps using free and easy to set up services:
+I wanted to have this server be accessbile from anywhere in the world. So I performed the following steps using free and easy to set up services to make my server public:
 
 1. Home internet connections have changing IP addresses, DuckDNS gives a fixed domain that always points to current IP it is set to. Set up a cron job on the server that pings DuckDNS every 5 minutes to keep the domain updated.
 
