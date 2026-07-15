@@ -31,19 +31,34 @@ On startup, Ferrite scans your music directory, reads track metadata (title, art
 
 ---
 
-Decisions Made in This Project
+## Decisions Made in This Project
 
-HTTP Range Requests for streaming
+### HTTP Range Requests for streaming
 
 Audio is served using HTTP range requests rather than sending the full file upfront. When the browser's <audio> element requests a track, it asks for small chunks at a time as playback progresses. The server responds with a 206 Partial Content status and only the requested byte range. This means playback starts immediately without waiting for a full download, seeking jumps directly to the relevant byte offset without re-transferring earlier parts of the file, and server memory stays low since files are never loaded whole into RAM. This is the same mechanism commercial streaming services use.
 
-SQLite over Postgres
+### SQLite over Postgres
 
 Ferrite uses SQLite as its database rather than a dedicated server like Postgres. Since Ferrite is self-hosted for personal use, SQLite is a single file on disk, requires no separate process to install or manage, and starts up as part of the application. For a low-concurrency read-heavy workload like a personal music library it performs well, and if the database file is ever lost it rebuilds completely from a rescan in seconds.
 
-Docker for deployment
+### Docker for deployment
 
 Ferrite ships with a production Dockerfile (`Dockerfile.prod`) that builds a small ARM64 image for running on a Raspberry Pi, plus a local Dockerfile/compose setup for running in a container on a dev machine. Packaging it as a container means the server, its runtime dependencies, and the SQLite data volume are all deployed as one unit, so shipping an update to the Pi is just pulling a new image rather than reconciling toolchains by hand. Since Rust compiles to a self-contained binary, Ferrite can just as easily be run directly on the host without Docker — the container is a deployment convenience, not a requirement.
+
+### Making Ferrite Public
+I wanted to have this server be accessbile from anywhere in the world. So I performed the following steps using free and easy to set up services:
+
+1. Home internet connections have changing IP addresses, DuckDNS gives a fixed domain (e.g. `ferrite-music.duckdns.org`) that always points to current IP it is set to. Set up a cron job on the server that pings DuckDNS every 5 minutes to keep the domain updated.
+
+2. By default home router blocks all incoming traffic from the internet. Add two port forwarding rules pointing ports 80 (HTTP) and 443 (HTTPS) at the server's local IP address so outside traffic can reach it.
+
+3. Nginx acts as a reverse proxy sitting in front of Ferrite. It handles HTTPS and forwards decrypted requests to Ferrite on port 3000. Certbot handles SSL certificate generation and renewal.
+
+4. Run Nginx only with the HTTP configuration and Certbot to perform the ACME challenge. Let's Encrypt verifies the domain by checking a file served from the server over the public internet and issues a free 90 day SSL certificate. Once the certificate is saved, set up Nginx with HTTP and HTTPS configuration.
+
+7. Add a username and password at the Nginx level so only allowed people can access Ferrite. Without this the server would be scanned by bots within minutes. 
+
+8. Let's Encrypt certificates expire after 90 days. A daily cron job running `certbot renew` checks if the certificate is close to expiring and renews it automatically, then restarts Nginx to load the new certificate.
 
 ---
 
@@ -82,6 +97,6 @@ Ferrite deploys to a Raspberry Pi running the container as a systemd/Docker serv
 - [x] Auto-deployment to Raspberry Pi via WUD (What's Up Docker)
 - [x] YouTube import via yt-dlp with background job queue
 - [x] AI metadata inference for imported tracks
+- [X] Enable public access via Nginx reverse proxy + Let's Encrypt HTTPS + DuckDNS
 - [ ] Clean up UI and add logo 
-- [ ] Enable public access via Nginx reverse proxy + Let's Encrypt HTTPS + DuckDNS
 - [ ] Optimize music directory scanner by using diff system
