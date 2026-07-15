@@ -48,7 +48,7 @@ Ferrite ships with a production Dockerfile (`Dockerfile.prod`) that builds a sma
 ### Making Ferrite Public
 I wanted to have this server be accessbile from anywhere in the world. So I performed the following steps using free and easy to set up services:
 
-1. Home internet connections have changing IP addresses, DuckDNS gives a fixed domain (e.g. `ferrite-music.duckdns.org`) that always points to current IP it is set to. Set up a cron job on the server that pings DuckDNS every 5 minutes to keep the domain updated.
+1. Home internet connections have changing IP addresses, DuckDNS gives a fixed domain that always points to current IP it is set to. Set up a cron job on the server that pings DuckDNS every 5 minutes to keep the domain updated.
 
 2. By default home router blocks all incoming traffic from the internet. Add two port forwarding rules pointing ports 80 (HTTP) and 443 (HTTPS) at the server's local IP address so outside traffic can reach it.
 
