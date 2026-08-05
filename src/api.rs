@@ -86,6 +86,7 @@ async fn run_download(pool: SqlitePool, id: i64, url: String) {
         .arg("-x")
         .arg("--audio-format")
         .arg("mp3")
+        .arg("--no-playlist")
         .arg("--write-info-json")
         .arg("-P")
         .arg(&temp_dir)
