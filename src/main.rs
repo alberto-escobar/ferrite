@@ -7,7 +7,9 @@ mod stream;
 use axum::{
     Router,
     routing::{get, post},
-    response::Html,
+    response::{Html, IntoResponse},
+    extract::Path,
+    http::{StatusCode, header},
 };
 
 #[tokio::main]
@@ -33,6 +35,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(index))
+        .route("/static/{*path}", get(static_asset))
         .route("/api/tracks", get(api::get_all_tracks))
         .route("/api/tracks/{id}", get(api::get_track_by_id))
         .route("/api/albums", get(api::get_all_albums))
@@ -51,4 +54,23 @@ async fn index() -> Html<String> {
     let html = std::fs::read_to_string("frontend/index.html")
         .unwrap_or_else(|_| "<h1>Could not load page</h1>".to_string());
     Html(html)
+}
+
+async fn static_asset(Path(path): Path<String>) -> impl IntoResponse {
+    if path.contains("..") {
+        return (StatusCode::BAD_REQUEST, "Invalid path").into_response();
+    }
+
+    let content_type = if path.ends_with(".js") {
+        "text/javascript; charset=utf-8"
+    } else if path.ends_with(".css") {
+        "text/css; charset=utf-8"
+    } else {
+        "application/octet-stream"
+    };
+
+    match std::fs::read(format!("frontend/{path}")) {
+        Ok(bytes) => ([(header::CONTENT_TYPE, content_type)], bytes).into_response(),
+        Err(_) => (StatusCode::NOT_FOUND, "Not found").into_response(),
+    }
 }
