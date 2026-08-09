@@ -1,7 +1,12 @@
 use std::path::Path;
 use lofty::prelude::*;
 use lofty::probe::Probe;
+use sqlx::SqlitePool;
 use walkdir::WalkDir;
+
+use crate::db;
+
+const MUSIC_DIR: &str = "./Music";
 
 fn is_audio_file(path: &Path) -> bool {
     match path.extension().and_then(|e| e.to_str()) {
@@ -89,4 +94,52 @@ pub fn scan_directory(dir: &Path) -> Vec<ScannedTrack> {
     }
 
     tracks
+}
+
+/// Cheap summary of the audio files under `dir` (count, total bytes) used by
+/// the watcher to detect that something changed without re-reading tags.
+pub fn fingerprint_dir(dir: &Path) -> (u64, u64) {
+    let mut count = 0u64;
+    let mut total_size = 0u64;
+
+    for entry in WalkDir::new(dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .filter(|e| is_audio_file(e.path()))
+    {
+        if let Ok(metadata) = entry.metadata() {
+            count += 1;
+            total_size += metadata.len();
+        }
+    }
+
+    (count, total_size)
+}
+
+/// Scans `./Music`, upserts what it finds, and removes any track rows whose
+/// file no longer exists on disk (e.g. deleted by hand over SSH).
+pub async fn sync_library(pool: &SqlitePool) {
+    let music_dir = Path::new(MUSIC_DIR).to_path_buf();
+    let tracks = tokio::task::spawn_blocking(move || scan_directory(&music_dir))
+        .await
+        .unwrap_or_default();
+
+    for track in tracks {
+        db::insert_track(
+            pool,
+            &track.title,
+            &track.artist,
+            track.album.as_deref(),
+            &track.file_path,
+            track.duration,
+            track.track_number,
+            track.year,
+        ).await;
+    }
+
+    let removed = db::prune_missing_tracks(pool).await;
+    if removed > 0 {
+        println!("🗑️  Removed {removed} track row(s) with no matching file");
+    }
 }

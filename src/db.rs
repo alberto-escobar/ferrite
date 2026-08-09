@@ -96,6 +96,37 @@ pub async fn insert_track(
     .expect("Failed to insert track");
 }
 
+pub async fn prune_missing_tracks(pool: &SqlitePool) -> u64 {
+    let rows: Vec<(i64, String)> = sqlx::query_as("SELECT id, file_path FROM tracks")
+        .fetch_all(pool)
+        .await
+        .expect("Failed to query tracks for pruning");
+
+    let missing_ids = tokio::task::spawn_blocking(move || {
+        rows.into_iter()
+            .filter(|(_, path)| !std::path::Path::new(path).exists())
+            .map(|(id, _)| id)
+            .collect::<Vec<i64>>()
+    })
+    .await
+    .unwrap_or_default();
+
+    if missing_ids.is_empty() {
+        return 0;
+    }
+
+    let placeholders = missing_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let query = format!("DELETE FROM tracks WHERE id IN ({placeholders})");
+
+    let mut q = sqlx::query(&query);
+    for id in &missing_ids {
+        q = q.bind(id);
+    }
+    q.execute(pool).await.expect("Failed to delete missing tracks");
+
+    missing_ids.len() as u64
+}
+
 // ── Album queries ─────────────────────────────────────────────────────────────
 
 pub async fn get_all_albums(pool: &SqlitePool) -> Vec<String> {
