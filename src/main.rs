@@ -3,6 +3,7 @@ mod scanner;
 mod api;
 mod metadata;
 mod stream;
+mod turnstile;
 
 use axum::{
     Router,
@@ -10,7 +11,9 @@ use axum::{
     response::{Html, IntoResponse},
     extract::Path,
     http::{StatusCode, header},
+    middleware,
 };
+use turnstile::AppState;
 
 #[tokio::main]
 async fn main() {
@@ -33,7 +36,11 @@ async fn main() {
         ).await;
     }
 
-    let app = Router::new()
+    let state = AppState::new(pool);
+
+    // Everything in `protected` sits behind the Turnstile gate; `/turnstile/verify`
+    // has to stay outside it or a visitor could never complete the challenge.
+    let protected = Router::new()
         .route("/", get(index))
         .route("/static/{*path}", get(static_asset))
         .route("/api/tracks", get(api::get_all_tracks))
@@ -43,7 +50,12 @@ async fn main() {
         .route("/api/tracks/{id}/stream", get(stream::stream_track))
         .route("/api/fetch", post(api::fetch_song))
         .route("/api/downloads", get(api::get_downloads))
-        .with_state(pool);
+        .layer(middleware::from_fn_with_state(state.clone(), turnstile::gate));
+
+    let app = Router::new()
+        .route("/turnstile/verify", post(turnstile::verify))
+        .merge(protected)
+        .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     println!("Ferrite server running at http://localhost:3000");
