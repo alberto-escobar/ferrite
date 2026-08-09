@@ -4,6 +4,7 @@ mod api;
 mod metadata;
 mod stream;
 mod turnstile;
+mod watcher;
 
 use axum::{
     Router,
@@ -21,20 +22,8 @@ async fn main() {
 
     let pool = db::init_db("sqlite://ferrite.db").await;
 
-    let music_dir = std::path::Path::new("./Music");
-    let tracks = scanner::scan_directory(music_dir);
-    for track in tracks {
-        db::insert_track(
-            &pool,
-            &track.title,
-            &track.artist,
-            track.album.as_deref(),
-            &track.file_path,
-            track.duration,
-            track.track_number,
-            track.year,
-        ).await;
-    }
+    scanner::sync_library(&pool).await;
+    watcher::spawn(pool.clone());
 
     let state = AppState::new(pool);
 

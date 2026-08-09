@@ -140,7 +140,7 @@ async fn run_download(pool: SqlitePool, id: i64, url: String) {
     match result {
         Ok(()) => {
             db::update_download_status(&pool, id, "done", None).await;
-            rescan_library(&pool).await;
+            crate::scanner::sync_library(&pool).await;
         }
         Err(e) => {
             eprintln!("[yt-dlp:{id}] failed: {e}");
@@ -260,22 +260,3 @@ fn write_tags(path: &std::path::Path, song_metadata: &metadata::SongMetadata) ->
         .map_err(|e| e.to_string())
 }
 
-async fn rescan_library(pool: &SqlitePool) {
-    let music_dir = std::path::Path::new("./Music").to_path_buf();
-    let tracks = tokio::task::spawn_blocking(move || crate::scanner::scan_directory(&music_dir))
-        .await
-        .unwrap_or_default();
-
-    for track in tracks {
-        db::insert_track(
-            pool,
-            &track.title,
-            &track.artist,
-            track.album.as_deref(),
-            &track.file_path,
-            track.duration,
-            track.track_number,
-            track.year,
-        ).await;
-    }
-}
